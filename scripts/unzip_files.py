@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(1, '../')
+sys.path.insert(1, '../utils')
 import os
 import gzip
 import shutil
