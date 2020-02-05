@@ -1,11 +1,15 @@
 import os
 import gzip
 import shutil
+from sd.infra.plot import *
 
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKGREEN = '\033[92m'
+    CYAN = '\033[36m'
+    WHITE = '\033[96m'
+    GRAY = '\033[97m'
     WARNING = '\033[93m'
     FAIL = '\033[91m'
     ENDC = '\033[0m'
@@ -44,3 +48,7 @@ def unzip_data(home_directory, remove_file=False):
         print(bcolors.OKGREEN + '%'*5 + ' FINISHED WITH ' + root + ' ' + '%'*5 + bcolors.ENDC)
 
     print(bcolors.OKBLUE + 'All files have been unziped.' + bcolors.ENDC)
+
+
+def printc(string, color=bcolors.ENDC, end='\n'): 
+    print(color + string + bcolors.ENDC + end)

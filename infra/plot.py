@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt 
+import numpy as np
 from textwrap import wrap 
 
 def show_images(images, save=None, size=None): 
@@ -68,7 +69,7 @@ class ImagePlot():
             ax.index = volumes[i].shape[0] // 2
             if self.titles is not None: 
                 ax.set_title('\n'.join(wrap(self.titles[i] + ": %d" % ax.index)))
-            ax.imshow(volumes[i][ax.index], cmap='gray')
+            ax.imshow(volumes[i][ax.index], cmap='gray', vmin=np.min(volumes[i]), vmax=np.max(volumes[i]))
         
         if self.nrows != 1: 
             for i in range(len(volumes), self.nrows*self.ncols): 

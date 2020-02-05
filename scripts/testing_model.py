@@ -1,15 +1,13 @@
-import sys
 import os 
+import sys
 print(sys.path)
-sys.path.insert(0, os.path.abspath('./../'))
-
-from unet import *
+from sd.models.unet import *
 import torch
 import torch.nn
 
 
-ones = torch.ones(1,3,256,256)
+ones = torch.ones(2,192,233,189)
 
 import pdb; pdb.set_trace()
-bu = BasicUNet()
+bu = BasicUNet(in_channels=192, out_channels=2)
 bu.forward(ones)
