@@ -140,7 +140,7 @@ class DL_Trainer(object):
                 # (1,197,233,189)
                 if not self.use_volumes: 
                     with tqdm(total=(len(self.train)*197), desc=f'Epoch {epoch + 1}/{epochs}', unit='slices') as pbar:
-                        self.process_slices(volumes, pbar)
+                        epoch_loss += self.process_slices(volumes, pbar)
                 else: 
                     with tqdm(total=len(self.train), desc=f'Epoch {epoch + 1}/{epochs}', unit='scan') as pbar: 
                         scan = volumes['scan']
@@ -169,4 +169,4 @@ class DL_Trainer(object):
                             
             losses.append(epoch_loss)
 
-        return loss
+        return losses
