@@ -37,7 +37,6 @@ class AtlasDataset(Dataset):
         path_keys = ['INDI Site ID', 'INDI Subject ID', 'Session'] 
         self.mri_df['path'] = self.mri_df[path_keys].apply(lambda x: '/'.join([self.preprocess(i) for i in x]), axis=1)
         
-                
         self.transform = transform
         
     def __len__(self): 
@@ -59,11 +58,13 @@ class AtlasDataset(Dataset):
             else: 
                 if masks is not None: 
                     masks += nib.load(file_path).get_fdata()
-                else: 
+                else:                     
                     masks = nib.load(file_path).get_fdata()
         
-        sample = np.array([t1mr, masks])
-
+        np.true_divide(t1mr, [255.0], out=t1mr)
+        np.true_divide(masks, [255.0], out=masks)
+        
+        sample = {'scan': torch.from_numpy(t1mr), 'mask': torch.from_numpy(masks)}
         if self.transform: 
             sample = self.transform(sample)
         

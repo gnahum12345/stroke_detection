@@ -13,13 +13,13 @@ def show_images(images, save=None, size=None):
         size: Size of the figure, if None then a default figure will be used. 
     """
     assert len(images) > 0, "images should contain at least 1 element"
-    assert len(images[0].shape) == 3, "each image should contain 3 fiels (w,h, c)"
+    assert len(images[0].shape) == 3, "each image should contain 3 elements (c, w,h)"
     
-    fig, ax = plt.subplots(nrows=images[0].shape(-1), ncols=len(images))
+    fig, ax = plt.subplots(nrows=images[0].shape[0], ncols=len(images))
     
     for i in range(len(images)): 
-        for j in range(len(images[0].shape[-1])): 
-            ax[i,j].imshow(images[i][:,:,j], cmap='gray')
+        for j in range(images[0].shape[0]):
+            ax[i,j].imshow(images[i][j,:,:], cmap='gray')
     
     plt.show()
     
@@ -66,7 +66,7 @@ class ImagePlot():
             else: 
                 ax = axes 
             ax.volume = volumes[i]
-            ax.index = volumes[i].shape[0] // 2
+            ax.index = 0
             if self.titles is not None: 
                 ax.set_title('\n'.join(wrap(self.titles[i] + ": %d" % ax.index)))
             ax.imshow(volumes[i][ax.index], cmap='gray', vmin=np.min(volumes[i]), vmax=np.max(volumes[i]))

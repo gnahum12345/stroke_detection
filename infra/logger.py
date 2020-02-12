@@ -1,4 +1,5 @@
 import torch
+import os 
 from torch.utils.tensorboard import SummaryWriter
 
 class Logger(object): 
@@ -14,7 +15,7 @@ class Logger(object):
         self.writer.add_scalars(main_tag, tag_scalar_dict, step)
         self.writer.flush()
 
-    def log_debugging(self, tag, text_string, step): 
+    def log(self, tag, text_string, step=0): 
         self.writer.add_text(tag, text_string, step)
         self.writer.flush()
         
@@ -22,6 +23,11 @@ class Logger(object):
         self.writer.add_graph(model, inputs)
         self.writer.flush()
 
+    def log_model_state(self, model, step): 
+        path = os.path.join(self.writer.get_logdir(), type(model).__name__ + '_%d.pt' % step)
+        torch.save(model.state_dict(), path)
+        
+        
     def close(self): 
         self.writer.close()
 
