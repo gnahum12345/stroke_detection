@@ -11,9 +11,10 @@ import torch.nn.functional as F
 class ConvBlock(nn.Module):
     def __init__(self, in_ch, out_ch, padding, dimension=2):
         super(ConvBlock, self).__init__()
-        
-        conv = eval('nn.Conv{}d'.format(dimension))
-        norm = eval('nn.BatchNorm{}d'.format(dimension))
+        conv = nn.Conv2d 
+        norm = nn.BatchNorm2d
+#         conv = eval('nn.Conv{}d'.format(dimension))
+#         norm = eval('nn.BatchNorm{}d'.format(dimension))
         self.block = nn.Sequential(
                         conv(in_ch, out_ch, kernel_size=3, padding=int(padding)), 
                         norm(out_ch), 
@@ -31,8 +32,9 @@ class ConvBlock(nn.Module):
 class UpBlock(nn.Module):
     def __init__(self, in_ch, out_ch, padding, dimension=2):
         super(UpBlock, self).__init__()
+        conv = nn.Conv2d
         
-        conv = eval('nn.Conv{}d'.format(dimension))
+#         conv = eval('nn.Conv{}d'.format(dimension))
         
         self.up = nn.Sequential(
                 nn.Upsample(mode='bilinear', scale_factor=2),
@@ -191,7 +193,7 @@ class UNet(nn.Module):
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.bilinear = bilinear
-
+        self.dimension = 2 
         self.inc = DoubleConv(n_channels, 64)
         self.down1 = Down(64, 128)
         self.down2 = Down(128, 256)

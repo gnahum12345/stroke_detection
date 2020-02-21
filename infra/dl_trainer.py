@@ -47,14 +47,14 @@ class DL_Trainer(object):
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
         
-
+        self.cuda = False 
         if self.device.type == 'cuda':
             torch.backends.cudnn.benchmark = True 
             self.cuda = True 
             self.net = self.net.type(torch.cuda.DoubleTensor)
 
 
-        self.use_volumes = '3D' in type(self.net).__name__
+        self.use_volumes = self.net.dimension == 3
         self.train, self.val, self.test = self.split(self.dataset, 0.7,0.2)
         
         
@@ -88,85 +88,61 @@ class DL_Trainer(object):
         return random_split(data, [train_s, valid_s, test_s])
 
 
-    def process_slices(self, volumes, pbar): 
-        scan = volumes['scan']
-        mask = volumes['mask']
-        mask = mask.transpose(1,0)
-        scan = scan.transpose(1,0) # (197, 1, 233, 189)
-        epoch_loss = 0 
+    def process_slices(self, mask, scan, pbar): 
         scan_dl = DataLoader(scan, batch_size=self.batch_size, shuffle=False, num_workers=8, pin_memory=True)
         mask_dl = DataLoader(mask, batch_size=self.batch_size, shuffle=False, num_workers=8, pin_memory=True)
-
+        epoch_loss = 0 
         for scan_slice, true_mask in zip(scan_dl, mask_dl):
             if (self.cuda): 
                 scan_slice = scan_slice.cuda()
                 true_mask = true_mask.cuda()
-            masked_pred = self.net(scan_slice)
-            loss = self.criterion(true_mask, masked_pred)
+
+            loss = self.process_object(true_mask, scan_slice)
+            
             epoch_loss += loss.item()
             self.logger.scalar_summary('loss/train', loss.item(), self.global_step)
-            pbar.set_postfix(**{'loss(batch)': loss.item()})
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            pbar.update(1)
-            self.global_step += 1
-            print('Iteration %05d\tLoss %f' % (self.global_step, loss.item()), end='')
-            scan_slice.detach()
-            true_mask.detach()
-            masked_pred.detach()
-            loss.detach()
+            self.logger.scalar_summary('cum_loss/train', epoch_loss, self.global_step)
+            pbar.set_postfix(**{f'loss(batch: {self.batch_size})': loss.item(), f'Average loss (across {self.global_step} iterations)': (epoch_loss/(self.global_step + 1))})
+            pbar.update(self.batch_size)
+            self.global_step += self.batch_size
             
             if self.global_step % self.freq == 0:
-                print('Iteration %05d\tLoss %f\tEpoch Loss %f ' % (self.global_step, loss.item(), epoch_loss), end='')
+                print()
                 self.logger.log_model_state(self.net, self.global_step)
     
         return epoch_loss 
     
+    def process_object(self, true_mask, scan):
+        masked_pred = self.net(scan)
+        scan = scan.detach().cpu()
+        loss = self.criterion(true_mask, masked_pred)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        return loss 
+        
+    
     def run_training_loop(self, n_iter, epochs, closure):
+        import pdb; pdb.set_trace()
         losses = []
         if self.use_volumes: 
             bs = self.batch_size
         else: 
             bs = 1 
-        self.train_loader = DataLoader(self.train, batch_size=bs, shuffle=True, num_workers=8, pin_memory=True)
-        self.val_loader = DataLoader(self.val, batch_size=bs, shuffle=False, num_workers=8, pin_memory=True)
-            
+        self.train_loader = DataLoader(self.train, batch_size=bs, shuffle=True, num_workers=8, pin_memory=False)
+        self.val_loader = DataLoader(self.val, batch_size=bs, shuffle=False, num_workers=8, pin_memory=False)
         for epoch in range(epochs):
-            epoch_loss = 0
-            self.net.train() # tells the net that it is training.
-            
-            for volumes in self.train_loader:
-                # (1,197,233,189)
-                if not self.use_volumes: 
-                    with tqdm(total=(len(self.train)*197), desc=f'Epoch {epoch + 1}/{epochs}', unit='slices') as pbar:
-                        epoch_loss += self.process_slices(volumes, pbar)
-                else: 
-                    with tqdm(total=len(self.train), desc=f'Epoch {epoch + 1}/{epochs}', unit='scan') as pbar: 
-                        scan = volumes['scan']
-                        mask = volumes['mask']
-                        mask = mask.unsqueeze(1) # (b, 197, 233, 189) -> (b, 1, 197, 233, 189)
-                        scan = scan.unsqueeze(1) # (b, 197, 233, 189) -> (b, 1, 197, 233, 189) 
-                        masked_pred = self.net(scan)
-                        loss = self.criterion(true_mask, masked_pred)
-                        epoch_loss += loss.item()
-                        self.logger.scalar_summary('loss/train', loss.item(), self.global_step)
-                        pbar.set_postfix(**{'loss(batch)': loss.item()})
-                        self.optimizer.zero_grad()
-                        loss.backward()
-                        self.optimizer.step()
-                        pbar.update(1)
-                        self.global_step += 1
-                        scan.detach()
-                        mask.detach()
-                        masked_pred.detach()
-                        loss.detach()
-                        print('Iteration %05d\tLoss %f' % (self.global_step, loss.item()),'\r', end='')
-                        if self.global_step % self.freq == 0:
-                            print('Iteration %05d\tLoss %f\tEpoch Loss %f ' % (self.global_step, loss.item(), epoch_loss), end='')
-                            self.logger.log_model_state(self.net, self.global_step)
-
+            with tqdm(total=(len(self.train)*197), desc=f'Epoch {epoch + 1}/{epochs}', unit='slices') as pbar:
+                epoch_loss = 0
+                self.net.train() # tells the net that it is training.
+                for volumes in self.train_loader:
+                    # (C,197,233,189)
+                    mask = volumes['mask'].transpose(1,0)
+                    scan = volumes['scan'].transpose(1,0) # (197, 1, 233, 189)
+                    epoch_loss = 0 
+                    if not self.use_volumes: 
+                        epoch_loss += self.process_slices(mask, scan, pbar)
                             
-            losses.append(epoch_loss)
-
+                
+                losses.append(epoch_loss)
         return losses

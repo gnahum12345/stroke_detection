@@ -6,8 +6,13 @@ import torch
 import torch.nn
 
 
-ones = torch.ones(2,192,233,189)
+ones = torch.ones(2,1,233,189)
 
 import pdb; pdb.set_trace()
-bu = BasicUNet(in_channels=192, out_channels=2)
-bu.forward(ones)
+bu = BasicUNet(in_channels=1, out_channels=1)
+print(bu.forward(ones).shape)
+
+cu = UNet(n_channels=1, n_classes=1)
+print(cu.forward(ones).shape)
+
+print('ones: {}'.format(ones.shape))

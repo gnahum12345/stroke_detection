@@ -54,12 +54,12 @@ class AtlasDataset(Dataset):
         for f in files: 
             file_path = os.path.join(dir_name, f); 
             if 't1w' in f and '.nii' in f: 
-                t1mr = nib.load(file_path).get_fdata()
+                t1mr = nib.load(file_path).get_fdata().T
             else: 
                 if masks is not None: 
-                    masks += nib.load(file_path).get_fdata()
+                    masks = masks +  nib.load(file_path).get_fdata().T
                 else:                     
-                    masks = nib.load(file_path).get_fdata()
+                    masks = nib.load(file_path).get_fdata().T
         
         np.true_divide(t1mr, [255.0], out=t1mr)
         np.true_divide(masks, [255.0], out=masks)

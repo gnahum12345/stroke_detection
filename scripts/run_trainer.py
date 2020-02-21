@@ -152,6 +152,7 @@ def main():
     
     printf('Setting up device', bcolors.WHITE)
     device = setup_device(args)
+    printf('Got device: {}'.format(device), bcolors.WHITE)
 
     printf('{5}model: {0}\nhparams of model:{6}  \n\tin_channels: {1}\n\tout_channels: {2}\n\tnumber_of_filters: {3} \n\tpadding: {4}'.format(args.model + bcolors.ENDC + bcolors.WHITE, args.in_channels, args.out_channels, args.wf, args.padding, bcolors.HEADER + bcolors.UNDERLINE, bcolors.ENDC), bcolors.BOLD)
 
@@ -171,9 +172,6 @@ def main():
 
     printf('Got Dataset {}'.format(bcolors.WHITE + bcolors.BOLD + args.dataset), bcolors.CYAN)
 
-
-    printf('Got device: {}'.format(device), bcolors.WHITE)
-
     printf('Setting up Logger', bcolors.WHITE)
 
     if args.logdir:
@@ -182,7 +180,6 @@ def main():
         logger = Logger(None, args.model)
  
     printf('Logging to %s' % (logger.writer.get_logdir()), bcolors.WHITE)
-
 
     printf('Logging model')
     log_model(logger, dataset, model)
