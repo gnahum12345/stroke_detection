@@ -31,7 +31,7 @@ def get_args():
 
 
     # model
-    parser.add_argument('--model', '-m', dest='model', default='UNet', choices=['UNet', 'BasicUNet', '3DUNet'], help='models: ' + ' | '.join(['UNet', 'BasicUNet', '3DUNet']))
+    parser.add_argument('--model', '-m', dest='model', default='UNet', choices=['UNet', 'BasicUNet', 'UNet3D'], help='models: ' + ' | '.join(['UNet', 'BasicUNet', 'UNet3D']))
 
 
     # data_location
@@ -40,7 +40,7 @@ def get_args():
     parser.add_argument('--dataset', '--data', dest='dataset', default='atlas', choices=['atlas', 'isles/17', 'isles/18'], help='datasets: '  + ' | '.join(['atlas', 'isles/17', 'isles/18']))
 
     # optimizer_type:
-    parser.add_argument('--optimizer', '-op', dest='optimizer', default='adam', choices=['adam', 'sdg'], help='optimizers: ' + ' | '.join(['adam', 'sdg']) +  '\nfor more info see: https://pytorch.org/docs/stable/optim.html')
+    parser.add_argument('--optimizer', '-op', dest='optimizer', default='adam', choices=['adam', 'sgd'], help='optimizers: ' + ' | '.join(['adam', 'sgd']) +  '\nfor more info see: https://pytorch.org/docs/stable/optim.html')
 
     # logisitics for recovery.
     parser.add_argument('--seed', '-s', dest='seed', type=int, default=0, help="Random seed to make the program reproducibile, by default 0")
@@ -56,11 +56,11 @@ def get_model(args):
     # TODO (gn): adding more models in here.
     model = None
     if args.model == 'BasicUNet':
-        model = BasicUNet(in_channels=args.in_channels, out_channels=args.out_channels, wf=args.wf, padding=args.padding, dimension=2).double()
+        model = BasicUNet(in_channels=args.in_channels, out_channels=args.out_channels, wf=args.wf, padding=args.padding, depth=5).double()
     elif args.model == 'UNet': 
         model = UNet(args.in_channels, args.out_channels).double()
-    elif args.model == '3DUNet': 
-        model = BasicUNet(in_channels=args.in_channels, out_channels=args.out_channels, wf=args.wf, padding=args.padding, dimension=3).double()
+    elif args.model == 'UNet3D': 
+        model = UNet3D(in_channels=args.in_channels, out_channels=args.out_channels, wf=args.wf, depth=5, padding=args.padding).double()
 
     assert model is not None, 'Need to specify a model'
     if args.load: 
@@ -187,7 +187,8 @@ def main():
     params = get_dl_params(args, logger, device, model, dataset)
 #    import pdb; pdb.set_trace()
     dl = DL_Trainer(params)
-    dl.run_training_loop(args.epochs, 1, lambda x: x)
+    dl.run_training_loop(args.epochs,  lambda : print('closer was called'))
+    dl.validate()
     logger.close()
 
 

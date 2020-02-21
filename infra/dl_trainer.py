@@ -88,7 +88,7 @@ class DL_Trainer(object):
         return random_split(data, [train_s, valid_s, test_s])
 
 
-    def process_slices(self, mask, scan, pbar): 
+    def process_slices(self, mask, scan, pbar, isTraining=True): 
         scan_dl = DataLoader(scan, batch_size=self.batch_size, shuffle=False, num_workers=8, pin_memory=True)
         mask_dl = DataLoader(mask, batch_size=self.batch_size, shuffle=False, num_workers=8, pin_memory=True)
         epoch_loss = 0 
@@ -96,25 +96,33 @@ class DL_Trainer(object):
             if (self.cuda): 
                 scan_slice = scan_slice.cuda()
                 true_mask = true_mask.cuda()
-
-            loss = self.process_object(true_mask, scan_slice)
-            
+            if isTraining: 
+                loss = self.process_object(true_mask, scan_slice)
+            else: 
+                pred_mask = self.net(scan_slice)
+                loss = self.criterion(true_mask, pred_mask)
             epoch_loss += loss.item()
-            self.logging(loss.item(), epoch_loss, pbar)
+            self.logging(loss.item(), epoch_loss, pbar, isTraining)
             
         return epoch_loss 
     
-    def logging(loss, epoch_loss, pbar): 
-        self.logger.scalar_summary('loss/train', loss, self.global_step)
-        self.logger.scalar_summary('cum_loss/train', loss, self.global_step)
+    def logging(self, loss, epoch_loss, pbar, isTraining): 
+        if isTraining: 
+            self.logger.scalar_summary('loss/train', loss, self.global_step)
+            self.logger.scalar_summary('cum_loss/train', loss, self.global_step)
+        else: 
+            self.logger.scalar_summary('loss/val', loss, self.global_step)
+            self.logger.scalar_summary('cum_loss/val', loss, self.global_step)
+            
         pbar.set_postfix(**{f'loss(batch: {self.batch_size})': loss, f'Average loss (across {self.global_step} iterations)': (epoch_loss/(self.global_step + 1))})
+        
         pbar.update(self.batch_size)
         self.global_step += self.batch_size
         if self.global_step % self.freq == 0: 
             self.logger.log_model_state(self.net, 'tmp_%d' % self.global_step)
             self.logger.log('model', 'logged latest model', self.global_step)
     
-    def process_volumes(self, masks, scans): 
+    def process_volumes(self, masks, scans, isTraining=True): 
         #TODO make the volumes: 
         # (B, S, W, H)
         # convert it to (1, B, S, W, H) => (B, 1, S, W, H)
@@ -123,10 +131,16 @@ class DL_Trainer(object):
         if self.cuda: 
             scans = scans.cuda()
             masks = masks.cuda()
-        loss = self.process_object(masks, scan_slice)
-        epoch_loss = loss.item()
-        self.logging(loss.item(), epoch_loss, pbar)
+        if isTraining: 
+            loss = self.process_object(masks, scan_slice)
+            epoch_loss = loss.item()
+        else: 
+            masked_pred = self.net(scans)
+            loss = self.criterion(masks, masked_pred)
+            epoch_loss = loss.item()
         
+        self.logging(loss.item(), epoch_loss, pbar, isTraining)
+            
         return loss 
     
     def process_object(self, true_mask, scan):
@@ -139,7 +153,7 @@ class DL_Trainer(object):
         return loss 
         
     
-    def run_training_loop(self, n_iter, epochs, closure):
+    def run_training_loop(self, epochs, closure):
         import pdb; pdb.set_trace()
         losses = []
         if self.use_volumes: 
@@ -160,12 +174,28 @@ class DL_Trainer(object):
                     if not self.use_volumes: 
                         masks = masks.transpose(1,0)
                         scans = scans.transpose(1,0) # (1,189,233,197)
-                        epoch_loss += self.process_slices(masks, scans, pbar)
+                        epoch_loss += self.process_slices(masks, scans, pbar, True)
                     else: 
-                        epoch_loss += self.process_volumes(masks, scans, pbar)
+                        epoch_loss += self.process_volumes(masks, scans, pbar, True)
                 
                 losses.append(epoch_loss)
 
         self.logger.log_model_state(self.net, 'final_model' % self.global_step)
         self.logger.log('model', 'logged last model', self.global_step)
         return losses
+
+
+    def validate(self): 
+        losses = [] 
+        for volumes in self.val_loader: 
+            with tqdm(total=len(self.val)*197, desc=f'Volumes', unit='slices') as pbar: 
+                mask = volumes['mask']
+                scans = volumes['scan']
+                if not self.use_volumes: 
+                    masks = masks.transpose(1,0)
+                    scans = scans.transpose(1,0)
+                    losses.append(self.process_slice(masks, scans, pbar, False))
+                else: 
+                    losses.append(self.process_volumes(masks, scnas, pbar, False))
+                    
+        return losses 

@@ -6,17 +6,20 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from functools import partial 
+from functools import partial
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, padding, kernel_size=3):
+    def __init__(self, in_ch, out_ch, padding, dimension, kernel_size=3):
         super(ConvBlock, self).__init__()
+        conv = eval('nn.Conv{}d'.format(dimension)) 
+        norm = eval('nn.BatchNorm{}d'.format(dimension))
+        
         self.block = nn.Sequential(
-                        nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=int(padding)), 
-                        nn.BatchNorm3d(out_ch), 
+                        conv(in_ch, out_ch, kernel_size=kernel_size, padding=int(padding)), 
+                        norm(out_ch), 
                         nn.ReLU(inplace=True), 
-                        nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=int(padding)), 
-                        nn.BatchNorm3d(out_ch), 
+                        conv(out_ch, out_ch, kernel_size=kernel_size, padding=int(padding)), 
+                        norm(out_ch), 
                         nn.ReLU(inplace=True), 
                     )
 
@@ -26,25 +29,14 @@ class ConvBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, padding, kernel_size, concat=True):
+    def __init__(self, in_ch, out_ch, padding, dimension=2, conv_kernel_size=3):
         super(UpBlock, self).__init__()
         
-        self.up = nn.Sequential(
-                nn.Upsample(mode="nearest", scale_factor=2),
-                nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size),
-            )
-        selfjoining = partial(self._joining, concat=concat)
+        self.up = nn.Sequential(nn.Upsample(mode='nearest', scale_factor=2), nn.Conv2d(in_ch, out_ch, 1))
+        
 
-        self.conv_block = ConvBlock(in_ch, out_ch, padding, kernel_size)
-
-    
-    @staticmethod 
-    def _joining(encoder_features, x, concat): 
-        if concat: 
-            return torch.cat([encoder_features, x], dim=1)
-        else: 
-            return encoder_features + x 
-    
+        self.conv_block = ConvBlock(in_ch, out_ch, padding, dimension, kernel_size=conv_kernel_size)
+        
         
     def forward(self, x1, x2):
         x1 = self.up(x1) # C x H x W 
@@ -58,10 +50,21 @@ class UpBlock(nn.Module):
         return self.conv_block(x)
     
 class DownBlock(nn.Module): 
-    def __init__(self, in_ch, out_ch, padding, pool_kernel_size, conv_kernel_size): 
+    ''' 
+    A single module for the encoding path of a UNet. It will be a max pool followed by a convblock. 
+    Args: 
+        in_ch (int): number of input channels
+        out_ch (int): number of output channels
+        padding (bool or int or tupe): adding zero padding on all sized. 
+        conv_kernel_size (int or tuple): the size of the window
+        pool_kernel_size (int or tuple): the size of the window for the kernel. 
+    '''
+    def __init__(self, in_ch, out_ch, padding, dimension, conv_kernel_size=3, pool_kernel_size=2): 
         super().__init__()
-        self.down_block = nn.Sequential(nn.MaxPool3d(pool_kernel_size),
-                                        ConvBlock(in_ch, out_ch, padding, conv_kernel_size)
+        pool = eval('nn.MaxPool{}d'.format(dimension))
+        
+        self.down_block = nn.Sequential(pool(pool_kernel_size),
+                                        ConvBlock(in_ch, out_ch, padding, dimension, kernel_size=conv_kernel_size)
                                        )
     def forward(self, x): 
         return self.down_block(x)
@@ -74,20 +77,20 @@ class BasicUNet(nn.Module):
         This class is called BasicUNet because it follows the paper 
         and only requires only the number of input channels and output channels. 
     '''
-    def __init__(self, in_channels=1, out_channels=2, wf=64, depth=5, padding=True, dimension=2): 
+    def __init__(self, in_channels=1, out_channels=2, wf=64, depth=5, padding=True): 
         
         super(BasicUNet, self).__init__()
-        self.dimension = dimension 
+        self.dimension = 2 
         self.padding = padding
         self.depth = depth 
         self.down_path = nn.ModuleList()
-        self.inc = ConvBlock(in_channels, wf, int(padding), dimension)
+        self.inc = ConvBlock(in_channels, wf, int(padding), 2, kernel_size=3)
         prev_channels = wf
 
         for i in range(1, depth):
             fil = wf * (2**i)
             self.down_path.append(
-                DownBlock(prev_channels, fil, int(padding), dimension)
+                DownBlock(prev_channels, fil, int(padding), self.dimension, conv_kernel_size=3, pool_kernel_size=2)
             )
             prev_channels = fil
 
@@ -95,15 +98,15 @@ class BasicUNet(nn.Module):
         for i in reversed(range(depth-1)):
             fil = wf * (2**i)
             self.up_path.append(
-                UpBlock(prev_channels, fil , int(padding), dimension)
+                UpBlock(prev_channels, fil , int(padding), self.dimension, conv_kernel_size=3)
             )
             prev_channels = fil 
 
-        conv = nn.Conv2d if dimension == 2 else nn.Conv3d 
-        self.last = conv(prev_channels, out_channels, kernel_size=1, stride=1, padding=0)
+        self.last = nn.Conv2d(prev_channels, out_channels, kernel_size=1, stride=1, padding=0)
         
     
     def forward(self, x): 
+#         import pdb; pdb.set_trace()
         blocks = [] 
         x = self.inc(x)
         blocks.append(x)
@@ -116,9 +119,99 @@ class BasicUNet(nn.Module):
             x = up(x, blocks[-i-1])
         
         return self.last(x)
+ 
+    
+class UpBlock3D(nn.Module): 
+    ''' 
+    A single module for the decoding path of a UNet. It will have an upsampling via interpolation followed by a convblock. 
+    Args: 
+        in_ch (int): number of input channels
+        out_ch (int): number of output channels
+        padding (bool or int or tupe): adding zero padding on all sized. 
+        conv_kernel_size (int or tuple): the size of the window
+        mode (str): the mode of interpolation.  
+    '''
+    def __init__(self, in_ch, out_ch, padding=1, conv_kernel_size=3, mode='nearest'): 
+        super(UpBlock3D, self).__init__() 
+        
+        self.upsample = partial(self._interpolate, mode=mode)
+        self.basic_conv = nn.Conv3d(in_ch, out_ch, kernel_size=1)
+        self.joining = partial(self._joining, concat=True)
+        self.conv_block = ConvBlock(in_ch, out_ch, padding, 3, kernel_size=conv_kernel_size)
     
     
+    def forward(self, x1, x2): 
+        output_size = x2.size()[2:]
+        x1 = self.upsample(x1, output_size) 
+        x1 = self.basic_conv(x1) # 1x1x1x1 convolution. (scale effect)
+        x = self.joining(x1, x2) 
+        return self.conv_block(x)
+    
+    @staticmethod
+    def _interpolate(x,size,mode): 
+        return F.interpolate(x, size=size, mode=mode)
+        
 
+    @staticmethod 
+    def _joining(encoded, x, concat): 
+        if concat: 
+            return torch.cat((encoded, x), dim=1)
+        else: 
+            return encoded + x 
+
+class UNet3D(nn.Module): 
+    '''
+    3DUnet extended from BasicUNet
+    '''
+    def __init__(self, in_channels=1, out_channels=2, wf=64, depth=5, padding=True):
+        super(UNet3D, self).__init__()
+        self.testing = False
+        self.dimension = 3 
+        self.final_activation = nn.Softmax(dim=1)
+        self.padding = int(padding)
+        self.depth = depth 
+        self.down_path = nn.ModuleList()
+        self.inc = ConvBlock(in_channels, wf, padding, 3, kernel_size=3)
+        prev_channels = wf 
+        
+        for i in range(1, depth):
+            fil = wf * (2**i)
+            self.down_path.append(
+                DownBlock(prev_channels, fil, int(padding), 3, 3, 2)
+            )
+            prev_channels = fil
+
+        self.up_path = nn.ModuleList()
+        for i in reversed(range(depth-1)):
+            fil = wf * (2**i)
+            self.up_path.append(
+                UpBlock3D(prev_channels, fil , int(padding), conv_kernel_size=3, mode="nearest")
+            )
+            prev_channels = fil 
+
+        self.last = nn.Conv3d(prev_channels, out_channels, kernel_size=1, stride=1, padding=0)
+        
+    def forward(self, x): 
+        blocks = [] 
+        x = self.inc(x)
+        blocks.append(x)
+        for i, down in enumerate(self.down_path): 
+            x = down(x)
+            blocks.insert(0, x)
+        
+        blocks.pop(0)
+        
+        for i, up in enumerate(self.up_path): 
+            x = up(x, blocks.pop(0))
+        
+        x = self.last(x)
+        
+        if self.testing and self.final_activation is not None: 
+            x = self.final_activation(x)
+        
+        return x 
+            
+    
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
 
