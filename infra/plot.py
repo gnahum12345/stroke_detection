@@ -34,6 +34,8 @@ class ImagePlot():
         self.v = volumes
         self.titles = titles
         self.nrows = nrows
+        self.tracking = [] 
+        
 
     def render(self): 
         assert len(self.v) > 0, 'Volumes should be a list of 3D images and should not be empty.'
@@ -48,7 +50,7 @@ class ImagePlot():
                     keys.remove(key)
 
     def multi_slice_viewer(self):
-        self.remove_keymap_conflicts({'j', 'k', 'l', 'h', 's', 't', 'left', 'right', 'up', 'down'})
+        self.remove_keymap_conflicts({'j', 'k', 'l', 'g', 'h', 's', 't', 'left', 'right', 'up', 'down'})
         plt.rcParams["axes.titlesize"] = 8
         volumes = self.v
         self.ncols = len(volumes)//self.nrows 
@@ -90,7 +92,35 @@ class ImagePlot():
             self.transpose_images(fig)
         elif event.key == 's': 
             self.save()
+        elif event.key == 'g': 
+            self.toggle_tracking(axes)
+        
+        if len(self.tracking): 
+            self.tracking.append(event.key)
+        
         fig.canvas.draw()
+        
+    def goto(self, tracking, axes): 
+        num = int(''.join(tracking))
+        for ax in axes: 
+            volume = ax.volume
+            ax.index = num % volume.shape[0]
+            t = ax.get_title().split(':')[0]
+            ax.set_title(t + ': %d' % ax.index)
+            ax.images[0].set_array(volume[ax.index])
+        return axes
+        
+    def toggle_tracking(self, axes): 
+        if len(self.tracking) != 0: 
+            print(self.tracking)
+            n_arr = self.tracking[2:]
+            self.tracking = [] 
+            a = self.goto(n_arr, axes)
+            return a 
+        else: 
+            self.tracking = ['hiii']
+        
+        
 
     def transpose_images(self, fig): 
         axes = fig.axes

@@ -6,21 +6,17 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from functools import partial 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, padding, dimension=2):
+    def __init__(self, in_ch, out_ch, padding, kernel_size=3):
         super(ConvBlock, self).__init__()
-        conv = nn.Conv2d 
-        norm = nn.BatchNorm2d
-#         conv = eval('nn.Conv{}d'.format(dimension))
-#         norm = eval('nn.BatchNorm{}d'.format(dimension))
         self.block = nn.Sequential(
-                        conv(in_ch, out_ch, kernel_size=3, padding=int(padding)), 
-                        norm(out_ch), 
+                        nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size, padding=int(padding)), 
+                        nn.BatchNorm3d(out_ch), 
                         nn.ReLU(inplace=True), 
-                        conv(out_ch, out_ch, kernel_size=3, padding=int(padding)), 
-                        norm(out_ch), 
+                        nn.Conv3d(out_ch, out_ch, kernel_size=kernel_size, padding=int(padding)), 
+                        nn.BatchNorm3d(out_ch), 
                         nn.ReLU(inplace=True), 
                     )
 
@@ -30,19 +26,25 @@ class ConvBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, padding, dimension=2):
+    def __init__(self, in_ch, out_ch, padding, kernel_size, concat=True):
         super(UpBlock, self).__init__()
-        conv = nn.Conv2d
-        
-#         conv = eval('nn.Conv{}d'.format(dimension))
         
         self.up = nn.Sequential(
-                nn.Upsample(mode='bilinear', scale_factor=2),
-                conv(in_ch, out_ch, kernel_size=1),
+                nn.Upsample(mode="nearest", scale_factor=2),
+                nn.Conv3d(in_ch, out_ch, kernel_size=kernel_size),
             )
+        selfjoining = partial(self._joining, concat=concat)
 
-        self.conv_block = ConvBlock(in_ch, out_ch, padding, dimension)
-        
+        self.conv_block = ConvBlock(in_ch, out_ch, padding, kernel_size)
+
+    
+    @staticmethod 
+    def _joining(encoder_features, x, concat): 
+        if concat: 
+            return torch.cat([encoder_features, x], dim=1)
+        else: 
+            return encoder_features + x 
+    
         
     def forward(self, x1, x2):
         x1 = self.up(x1) # C x H x W 
@@ -56,11 +58,10 @@ class UpBlock(nn.Module):
         return self.conv_block(x)
     
 class DownBlock(nn.Module): 
-    def __init__(self, in_ch, out_ch, padding, dimension=2): 
+    def __init__(self, in_ch, out_ch, padding, pool_kernel_size, conv_kernel_size): 
         super().__init__()
-        maxpool = eval('nn.MaxPool{}d'.format(dimension))
-        self.down_block = nn.Sequential(maxpool(2),
-                                        ConvBlock(in_ch, out_ch, padding, dimension)
+        self.down_block = nn.Sequential(nn.MaxPool3d(pool_kernel_size),
+                                        ConvBlock(in_ch, out_ch, padding, conv_kernel_size)
                                        )
     def forward(self, x): 
         return self.down_block(x)

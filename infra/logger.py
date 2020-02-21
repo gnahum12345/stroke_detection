@@ -27,9 +27,10 @@ class Logger(object):
     def get_dir(self): 
         return self.writer.get_logdir()
     
-    def log_model_state(self, model, step): 
-        path = os.path.join(self.writer.get_logdir(), type(model).__name__ + '_%d.pt' % step)
+    def log_model_state(self, model, name='tmp'): 
+        path = os.path.join(self.writer.get_logdir(), type(model).__name__ + '_%s.pt' % name)
         torch.save(model.state_dict(), path)
+        
     
     def log_video(self, tag, global_step=None, img_tns=None,finished_video=False, video_tns=None, debug=False):
         '''

@@ -25,7 +25,7 @@ class DL_Trainer(object):
                - frequency
                - learning rate (lr)
                - logger
-               - optimizer (adam/sdg/agd)
+               - optimizer (adam/sgd/agd)
                - seed
         '''
 
@@ -69,7 +69,7 @@ class DL_Trainer(object):
         name_opt = self.optimizer_type.strip().lower()
         if name_opt == 'adam':
             optimizer = torch.optim.Adam(self.net.parameters(), lr=self.lr)
-        elif name_opt == 'sgd': 
+        elif name_opt == 'sgd':
             optimizer = torch.optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
 
         self.logger.log('Optimizer', 'Optimizer set as {0}, \n {1}'.format(self.optimizer_type, str(optimizer)))
@@ -100,17 +100,34 @@ class DL_Trainer(object):
             loss = self.process_object(true_mask, scan_slice)
             
             epoch_loss += loss.item()
-            self.logger.scalar_summary('loss/train', loss.item(), self.global_step)
-            self.logger.scalar_summary('cum_loss/train', epoch_loss, self.global_step)
-            pbar.set_postfix(**{f'loss(batch: {self.batch_size})': loss.item(), f'Average loss (across {self.global_step} iterations)': (epoch_loss/(self.global_step + 1))})
-            pbar.update(self.batch_size)
-            self.global_step += self.batch_size
+            self.logging(loss.item(), epoch_loss, pbar)
             
-            if self.global_step % self.freq == 0:
-                print()
-                self.logger.log_model_state(self.net, self.global_step)
-    
         return epoch_loss 
+    
+    def logging(loss, epoch_loss, pbar): 
+        self.logger.scalar_summary('loss/train', loss, self.global_step)
+        self.logger.scalar_summary('cum_loss/train', loss, self.global_step)
+        pbar.set_postfix(**{f'loss(batch: {self.batch_size})': loss, f'Average loss (across {self.global_step} iterations)': (epoch_loss/(self.global_step + 1))})
+        pbar.update(self.batch_size)
+        self.global_step += self.batch_size
+        if self.global_step % self.freq == 0: 
+            self.logger.log_model_state(self.net, 'tmp_%d' % self.global_step)
+            self.logger.log('model', 'logged latest model', self.global_step)
+    
+    def process_volumes(self, masks, scans): 
+        #TODO make the volumes: 
+        # (B, S, W, H)
+        # convert it to (1, B, S, W, H) => (B, 1, S, W, H)
+        masks = masks.unsqueeze(1)
+        scans = scans.unsqueeze(1)
+        if self.cuda: 
+            scans = scans.cuda()
+            masks = masks.cuda()
+        loss = self.process_object(masks, scan_slice)
+        epoch_loss = loss.item()
+        self.logging(loss.item(), epoch_loss, pbar)
+        
+        return loss 
     
     def process_object(self, true_mask, scan):
         masked_pred = self.net(scan)
@@ -136,13 +153,19 @@ class DL_Trainer(object):
                 epoch_loss = 0
                 self.net.train() # tells the net that it is training.
                 for volumes in self.train_loader:
-                    # (C,197,233,189)
-                    mask = volumes['mask'].transpose(1,0)
-                    scan = volumes['scan'].transpose(1,0) # (197, 1, 233, 189)
+                    # (B,S, W,H) where 1 is the channels. 
+                    masks = volumes['mask']
+                    scans = volumes['scan'] # (B, 189, 233, 197)
                     epoch_loss = 0 
                     if not self.use_volumes: 
-                        epoch_loss += self.process_slices(mask, scan, pbar)
-                            
+                        masks = masks.transpose(1,0)
+                        scans = scans.transpose(1,0) # (1,189,233,197)
+                        epoch_loss += self.process_slices(masks, scans, pbar)
+                    else: 
+                        epoch_loss += self.process_volumes(masks, scans, pbar)
                 
                 losses.append(epoch_loss)
+
+        self.logger.log_model_state(self.net, 'final_model' % self.global_step)
+        self.logger.log('model', 'logged last model', self.global_step)
         return losses
