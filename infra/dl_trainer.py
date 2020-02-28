@@ -122,7 +122,7 @@ class DL_Trainer(object):
             self.logger.log_model_state(self.net, 'tmp_%d' % self.global_step)
             self.logger.log('model', 'logged latest model', self.global_step)
     
-    def process_volumes(self, masks, scans, isTraining=True): 
+    def process_volumes(self, masks, scans, pbar, isTraining=True): 
         #TODO make the volumes: 
         # (B, S, W, H)
         # convert it to (1, B, S, W, H) => (B, 1, S, W, H)
@@ -132,13 +132,14 @@ class DL_Trainer(object):
             scans = scans.cuda()
             masks = masks.cuda()
         if isTraining: 
-            loss = self.process_object(masks, scan_slice)
+            loss = self.process_object(masks, scans)
             epoch_loss = loss.item()
         else: 
-            masked_pred = self.net(scans)
-            loss = self.criterion(masks, masked_pred)
-            epoch_loss = loss.item()
-        
+            with torch.no_grad(): 
+                masked_pred = self.net(scans)
+                loss = self.criterion(masks, masked_pred)
+                epoch_loss = loss.item()
+            
         self.logging(loss.item(), epoch_loss, pbar, isTraining)
             
         return loss 
@@ -170,7 +171,6 @@ class DL_Trainer(object):
                     # (B,S, W,H) where 1 is the channels. 
                     masks = volumes['mask']
                     scans = volumes['scan'] # (B, 189, 233, 197)
-                    epoch_loss = 0 
                     if not self.use_volumes: 
                         masks = masks.transpose(1,0)
                         scans = scans.transpose(1,0) # (1,189,233,197)
@@ -180,22 +180,31 @@ class DL_Trainer(object):
                 
                 losses.append(epoch_loss)
 
-        self.logger.log_model_state(self.net, 'final_model' % self.global_step)
+        self.logger.log_model_state(self.net, 'final_model')
         self.logger.log('model', 'logged last model', self.global_step)
         return losses
 
-
+#     def log_state(self): 
+#         '''
+#         A function to log the entire state of the DL_Trainer. 
+#         '''
+#         # todo 
+#     def load_state(self, file): 
+#         '''
+#         A function that uses the given file to get all the parameters. 
+#         '''
+#         # todo 
     def validate(self): 
         losses = [] 
         for volumes in self.val_loader: 
             with tqdm(total=len(self.val)*197, desc=f'Volumes', unit='slices') as pbar: 
-                mask = volumes['mask']
+                masks = volumes['mask']
                 scans = volumes['scan']
                 if not self.use_volumes: 
                     masks = masks.transpose(1,0)
                     scans = scans.transpose(1,0)
-                    losses.append(self.process_slice(masks, scans, pbar, False))
+                    losses.append(self.process_slice(masks, scans, pbar, False).item())
                 else: 
-                    losses.append(self.process_volumes(masks, scnas, pbar, False))
+                    losses.append(self.process_volumes(masks, scans, pbar, False).item())
                     
         return losses 

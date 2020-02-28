@@ -210,7 +210,14 @@ class UNet3D(nn.Module):
             x = self.final_activation(x)
         
         return x 
-            
+    
+class AttentionBlock(nn.Module): 
+    """
+    Attention Block 
+    """
+    def __init__(self, F_g, F_l, F_int): 
+        super(AttentionBlock, self).__init__()
+        self 
     
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""

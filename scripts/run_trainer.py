@@ -94,18 +94,16 @@ def set_debug_mode(debug_mode):
         printf = lambda x, end='\n': None
 
 def setup_device(args):
-    # todo (gn): make this gpu, after testing.
     if torch.cuda.is_available() and args.gpu:
         device = torch.device(int(args.gpuid))
     else:
         device = torch.device('cpu')
     
-
     return device
 
     
 
-def get_dl_params(args, logger, device, model, dataset):
+def get_dl_params(args, logger, device, model, dataset, loss_fn):
     '''
     Gets the params for DL_Trainer.
     [params, logger, device, net,
@@ -122,7 +120,7 @@ def get_dl_params(args, logger, device, model, dataset):
     ns.freq = args.freq
     ns.seed = args.seed
     ns.batch_size = args.batch_size
-    ns.loss_fn = dice_loss
+    ns.loss_fn = loss_fn
     ns.epochs = args.epochs
     return ns
 
@@ -144,7 +142,13 @@ def log_model(logger, dataset, model):
         sample = sample_scan.reshape(1, 1,*sample_scan.shape) # (B, C, D, W, H)
         logger.log_model(model.cpu(), (sample.cpu(), ))
         
-
+def get_loss_fn(model):
+    return dice_loss_general
+    if model == 'UNet3D':
+        return dice_loss3d 
+    else: 
+        return dice_loss
+    
 def main():
     args = get_args()
     set_debug_mode(args.debug)
@@ -183,8 +187,8 @@ def main():
 
     printf('Logging model')
     log_model(logger, dataset, model)
-    
-    params = get_dl_params(args, logger, device, model, dataset)
+    loss_fn = get_loss_fn(args.model)
+    params = get_dl_params(args, logger, device, model, dataset, loss_fn)
 #    import pdb; pdb.set_trace()
     dl = DL_Trainer(params)
     dl.run_training_loop(args.epochs,  lambda : print('closer was called'))
