@@ -35,7 +35,7 @@ class ImagePlot():
         self.titles = titles
         self.nrows = nrows
         self.tracking = [] 
-        
+        self.logging = [] 
 
     def render(self): 
         assert len(self.v) > 0, 'Volumes should be a list of 3D images and should not be empty.'
@@ -94,7 +94,7 @@ class ImagePlot():
             self.save()
         elif event.key == 'g': 
             self.toggle_tracking(axes)
-        
+
         if len(self.tracking): 
             self.tracking.append(event.key)
         
@@ -119,7 +119,6 @@ class ImagePlot():
             return a 
         else: 
             self.tracking = ['hiii']
-        
         
 
     def transpose_images(self, fig): 

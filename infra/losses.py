@@ -16,6 +16,32 @@ def dice(targs, inp, iou=False, eps=1e-8):
         l = intersect/ (union - intersect + eps)
     l[union == 0.] = 1. 
     return 1 - l.mean()
+
+def d_loss(true, logits, eps=1e-7): 
+    """
+    Args: 
+        true: a tensor of shape [B, 1, :]
+        logits: a tensor of shape [B, C, :]. Corresponds to the raw output or logits of the model
+        eps: added to the denominator for numerical stability. 
+    Returns: 
+        dice_loss: 1 - dice_coffecient. 
+    """ 
+    np_true_mask = np.array(true.detach().cpu())
+    true_mask_int = torch.zeros(true.shape).type(torch.int64).to(true.device)
+    true_mask_int[np_true_mask.nonzero()] = 1 
+    num_classes = logits.shape[1] 
+    true_1_hot = torch.eye(num_classes)[true_mask_int.squeeze(1)].to(true.device)
+    true_1_hot = true_1_hot.permute(0, len(true_1_hot.shape) -1 , *list(range(1, len(true_1_hot.shape) -1))).double()
+    probas = F.softmax(logits, dim=1)
+    true_1_hot = true_1_hot.type(logits.dtype)
+    dims = list(range(len(true_1_hot.shape))) 
+    dims.pop(1)
+    intersection = torch.sum(probas * true_1_hot, dim=dims)
+    cardinality = torch.sum(probas + true_1_hot, dim=dims)
+    dice_coff = (2. * intersection / (cardinality + eps))
+    return 1 - dice_coff[1] 
+
+
     
 def dice_loss(true, logits, eps=1e-7):
     """Computes the Sørensen–Dice loss.a
@@ -82,10 +108,12 @@ def dice_loss_general(true, logits, eps=1e-7):
         true_1_hot = true_1_hot.permute(0, len(true_1_hot.shape) -1 , *list(range(1, len(true_1_hot.shape) -1))).double()
         probas = F.softmax(logits, dim=1)
     true_1_hot = true_1_hot.type(logits.dtype)
-    intersection = torch.sum(probas * true_1_hot)
-    cardinality = torch.sum(probas + true_1_hot)
+    dims = list(range(len(true_1_hot.shape))) 
+    dims.pop(1)
+    intersection = torch.sum(probas * true_1_hot, dim=dims)
+    cardinality = torch.sum(probas + true_1_hot, dim=dims)
     dice_coff = (2. * intersection / (cardinality + eps))
-    return 1 - dice_coff 
+    return 1 - dice_coff[1] 
 
 
 def dice_loss3d(true, logits, eps=1e-7): 

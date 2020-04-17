@@ -203,7 +203,7 @@ class DL_Trainer(object):
                 if not self.use_volumes: 
                     masks = masks.transpose(1,0)
                     scans = scans.transpose(1,0)
-                    losses.append(self.process_slice(masks, scans, pbar, False).item())
+                    losses.append(self.process_slices(masks, scans, pbar, False))
                 else: 
                     losses.append(self.process_volumes(masks, scans, pbar, False).item())
                     
